@@ -99,42 +99,25 @@ enum TerminalJump {
 
     private static func sendTextToTerminalApp(tty: String?, text: String) {
         guard let tty else { return }
-
-        // For Terminal.app, we need to use a different approach
-        // Write text to a temp file and use pbcopy + paste
-        let tempFile = "/tmp/vibe-pet-input-\(UUID().uuidString).txt"
-        try? text.write(toFile: tempFile, atomically: true, encoding: .utf8)
-
+        let escapedText = text.replacingOccurrences(of: "\\", with: "\\\\")
+                              .replacingOccurrences(of: "\"", with: "\\\"")
         let script = """
         tell application "Terminal"
             repeat with w in windows
                 repeat with t in tabs of w
                     if tty of t is "\(tty)" then
+                        do script "\(escapedText)" in t
                         set selected tab of w to t
                         set index of w to 1
                         activate
-                        delay 0.1
-                        tell application "System Events"
-                            tell process "Terminal"
-                                set the clipboard to "\(text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))"
-                                keystroke "v" using command down
-                                delay 0.05
-                                keystroke return
-                            end tell
-                        end tell
                         return
                     end if
                 end repeat
             end repeat
         end tell
         """
-        logDebug("Executing AppleScript with paste method for Terminal.app")
+        logDebug("Executing AppleScript for Terminal.app")
         runAppleScript(script)
-
-        // Clean up temp file after a delay
-        DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
-            try? FileManager.default.removeItem(atPath: tempFile)
-        }
     }
 
     private static func sendTextToITerm(tty: String?, text: String) {
