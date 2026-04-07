@@ -19,6 +19,21 @@ enum TerminalJump {
         }
     }
 
+    static func sendText(to session: Session, text: String) {
+        guard let bundleId = session.terminalBundleId else {
+            return
+        }
+
+        switch bundleId {
+        case "com.apple.Terminal":
+            sendTextToTerminalApp(tty: session.tty, text: text)
+        case "com.googlecode.iterm2":
+            sendTextToITerm(tty: session.tty, text: text)
+        default:
+            break
+        }
+    }
+
     private static func jumpToTerminalApp(tty: String?) {
         if let tty {
             let script = """
@@ -61,6 +76,52 @@ enum TerminalJump {
         } else {
             activateApp(bundleId: "com.googlecode.iterm2")
         }
+    }
+
+    private static func sendTextToTerminalApp(tty: String?, text: String) {
+        guard let tty else { return }
+        let escapedText = text.replacingOccurrences(of: "\\", with: "\\\\")
+                              .replacingOccurrences(of: "\"", with: "\\\"")
+        let script = """
+        tell application "Terminal"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    if tty of t is "\(tty)" then
+                        do script "\(escapedText)" in t
+                        set selected tab of w to t
+                        set index of w to 1
+                        activate
+                        return
+                    end if
+                end repeat
+            end repeat
+        end tell
+        """
+        runAppleScript(script)
+    }
+
+    private static func sendTextToITerm(tty: String?, text: String) {
+        guard let tty else { return }
+        let escapedText = text.replacingOccurrences(of: "\\", with: "\\\\")
+                              .replacingOccurrences(of: "\"", with: "\\\"")
+        let script = """
+        tell application "iTerm2"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    repeat with s in sessions of t
+                        if tty of s is "\(tty)" then
+                            tell s to write text "\(escapedText)"
+                            select t
+                            tell w to select
+                            activate
+                            return
+                        end if
+                    end repeat
+                end repeat
+            end repeat
+        end tell
+        """
+        runAppleScript(script)
     }
 
     private static func activateApp(bundleId: String) {

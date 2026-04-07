@@ -2,7 +2,7 @@ import SwiftUI
 
 struct PromptInputView: View {
     @Binding var promptText: String
-    let workingDirectory: String?
+    let session: Session?
     let onSend: () -> Void
     @State private var isSending = false
     @State private var errorMessage: String?
@@ -54,7 +54,7 @@ struct PromptInputView: View {
                 .padding(.horizontal, 4)
             }
 
-            if let cwd = workingDirectory {
+            if let cwd = session?.cwd {
                 HStack(spacing: 4) {
                     Image(systemName: "folder.fill")
                         .font(.system(size: 8))
@@ -75,27 +75,37 @@ struct PromptInputView: View {
         isSending = true
         errorMessage = nil
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                try ClaudePromptSender.sendPrompt(promptText, workingDirectory: workingDirectory)
-                DispatchQueue.main.async {
-                    promptText = ""
-                    isSending = false
-                }
-            } catch ClaudePromptSender.SendError.claudeNotFound {
-                DispatchQueue.main.async {
-                    errorMessage = "Claude CLI not found"
-                    isSending = false
-                }
-            } catch ClaudePromptSender.SendError.executionFailed(let msg) {
-                DispatchQueue.main.async {
-                    errorMessage = "Failed: \(msg)"
-                    isSending = false
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    errorMessage = "Unknown error"
-                    isSending = false
+        if let session = session {
+            // Reply to existing session
+            TerminalJump.sendText(to: session, text: promptText)
+            promptText = ""
+            isSending = false
+            onSend()
+        } else {
+            // Start new session with claude CLI
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try ClaudePromptSender.sendPrompt(promptText, workingDirectory: session?.cwd)
+                    DispatchQueue.main.async {
+                        promptText = ""
+                        isSending = false
+                        onSend()
+                    }
+                } catch ClaudePromptSender.SendError.claudeNotFound {
+                    DispatchQueue.main.async {
+                        errorMessage = "Claude CLI not found"
+                        isSending = false
+                    }
+                } catch ClaudePromptSender.SendError.executionFailed(let msg) {
+                    DispatchQueue.main.async {
+                        errorMessage = "Failed: \(msg)"
+                        isSending = false
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        errorMessage = "Unknown error"
+                        isSending = false
+                    }
                 }
             }
         }
