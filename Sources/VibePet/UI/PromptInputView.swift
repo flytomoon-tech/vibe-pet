@@ -74,7 +74,13 @@ struct PromptInputView: View {
     }
 
     private var sourceBadge: some View {
-        let source = session?.source ?? SessionSource(rawValue: defaultCLI) ?? .claude
+        let source: SessionSource
+        if let sessionSource = session?.source {
+            source = sessionSource
+        } else {
+            source = SessionSource(rawValue: defaultCLI) ?? .claude
+        }
+
         let badge: String
         let color: Color
 
@@ -99,6 +105,7 @@ struct PromptInputView: View {
             .frame(width: 22, height: 18)
             .background(color)
             .clipShape(RoundedRectangle(cornerRadius: 3))
+            .id(defaultCLI) // Force refresh when defaultCLI changes
     }
 
     private func sendPrompt() {

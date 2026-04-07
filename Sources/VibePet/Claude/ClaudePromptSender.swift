@@ -69,23 +69,21 @@ final class ClaudePromptSender {
             throw SendError.cliNotFound
         }
 
+        // Use open command to launch in a new terminal window
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: cliPath)
-        process.arguments = [prompt]
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", "Terminal", cliPath, "--args", prompt]
 
         if let cwd = workingDirectory {
             process.currentDirectoryURL = URL(fileURLWithPath: cwd)
         }
 
-        // Capture output for debugging
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
         do {
             try process.run()
-            // Don't wait - let it run in background
+            process.waitUntilExit()
+            if process.terminationStatus != 0 {
+                throw SendError.executionFailed("open command failed")
+            }
         } catch {
             throw SendError.executionFailed(error.localizedDescription)
         }
