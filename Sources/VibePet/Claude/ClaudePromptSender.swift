@@ -69,18 +69,41 @@ final class ClaudePromptSender {
             throw SendError.cliNotFound
         }
 
-        // Use open command to launch in a new terminal window
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", "Terminal", cliPath, "--args", prompt]
+        // Create a temporary script that runs the CLI with the prompt
+        let tempScript = "/tmp/vibe-pet-launch-\(UUID().uuidString).sh"
+        let escapedPrompt = prompt.replacingOccurrences(of: "'", with: "'\\''")
+        let scriptContent: String
 
         if let cwd = workingDirectory {
-            process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+            scriptContent = """
+            #!/bin/bash
+            cd '\(cwd.replacingOccurrences(of: "'", with: "'\\''"))'
+            '\(cliPath.replacingOccurrences(of: "'", with: "'\\''"))' '\(escapedPrompt)'
+            """
+        } else {
+            scriptContent = """
+            #!/bin/bash
+            '\(cliPath.replacingOccurrences(of: "'", with: "'\\''"))' '\(escapedPrompt)'
+            """
         }
+
+        try scriptContent.write(toFile: tempScript, atomically: true, encoding: .utf8)
+        chmod(tempScript, 0o755)
+
+        // Use open to launch Terminal with the script
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", "Terminal", tempScript]
 
         do {
             try process.run()
             process.waitUntilExit()
+
+            // Clean up temp script after a delay
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                try? FileManager.default.removeItem(atPath: tempScript)
+            }
+
             if process.terminationStatus != 0 {
                 throw SendError.executionFailed("open command failed")
             }
