@@ -99,8 +99,14 @@ enum TerminalJump {
 
     private static func sendTextToTerminalApp(tty: String?, text: String) {
         guard let tty else { return }
-        let escapedText = text.replacingOccurrences(of: "\\", with: "\\\\")
-                              .replacingOccurrences(of: "\"", with: "\\\"")
+        // Remove any newlines/returns from the text - treat it as single line input
+        let cleanText = text.replacingOccurrences(of: "\n", with: " ")
+                            .replacingOccurrences(of: "\r", with: " ")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let escapedText = cleanText.replacingOccurrences(of: "\\", with: "\\\\")
+                                   .replacingOccurrences(of: "\"", with: "\\\"")
+
         let script = """
         tell application "Terminal"
             repeat with w in windows
@@ -116,7 +122,7 @@ enum TerminalJump {
             end repeat
         end tell
         """
-        logDebug("Executing AppleScript for Terminal.app")
+        logDebug("Executing AppleScript for Terminal.app, text=\(cleanText.prefix(50))")
         runAppleScript(script)
     }
 
