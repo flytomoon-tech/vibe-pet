@@ -11,6 +11,7 @@ class NotchWindowController: NSWindowController {
     private var isExpanded = false
     private var hostingView: NSHostingView<NotchRootView>?
     private var viewModel: NotchViewModel?
+    private var collapseTimer: Timer?
 
     private var collapsedWidth: CGFloat = 260
     private var collapsedHeight: CGFloat = 33
@@ -158,11 +159,23 @@ class NotchWindowController: NSWindowController {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        collapseTimer?.invalidate()
+        collapseTimer = nil
         if !isExpanded { toggleExpanded() }
     }
 
     override func mouseExited(with event: NSEvent) {
-        if isExpanded { toggleExpanded() }
+        // Delay collapse to allow interaction with popovers
+        collapseTimer?.invalidate()
+        collapseTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            // Check if mouse is still outside the window
+            if let window = self.window,
+               let mouseLocation = NSEvent.mouseLocation as CGPoint?,
+               !window.frame.contains(mouseLocation) {
+                if self.isExpanded { self.toggleExpanded() }
+            }
+        }
     }
 
     private func jumpToSession(_ session: Session) {
