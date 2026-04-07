@@ -103,8 +103,9 @@ enum TerminalJump {
         let escapedText = text.replacingOccurrences(of: "\\", with: "\\\\")
                               .replacingOccurrences(of: "\"", with: "\\\"")
                               .replacingOccurrences(of: "\n", with: "\\n")
+                              .replacingOccurrences(of: "\r", with: "")
 
-        // Use keystroke to simulate typing + return key
+        // Use do script with explicit newline to execute the command
         let script = """
         tell application "Terminal"
             repeat with w in windows
@@ -112,17 +113,15 @@ enum TerminalJump {
                     if tty of t is "\(tty)" then
                         set selected tab of w to t
                         set index of w to 1
+                        do script "\(escapedText)" in t
                         activate
-                        tell application "System Events"
-                            keystroke "\(escapedText)"
-                            keystroke return
-                        end tell
                         return
                     end if
                 end repeat
             end repeat
         end tell
         """
+        logDebug("Executing AppleScript for Terminal.app")
         runAppleScript(script)
     }
 
