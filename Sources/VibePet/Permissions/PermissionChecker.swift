@@ -13,23 +13,32 @@ enum PermissionChecker {
     }
 
     static func showAccessibilityAlert() {
+        NotificationCenter.default.post(name: .collapseNotchPanelForAlert, object: nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+
         let alert = NSAlert()
-        alert.messageText = "Accessibility Permission Required"
+        alert.messageText = "需要辅助功能权限"
         alert.informativeText = """
-        VibePet needs Accessibility permission to send text to existing terminal sessions.
+        VibePet 需要“辅助功能”权限，才能向现有终端会话发送回复文本。
 
-        Without this permission:
-        • You can still create new sessions ✅
-        • You cannot reply to existing sessions ❌
+        未授予该权限时：
+        • 仍然可以创建新会话 ✅
+        • 不能回复已有会话 ❌
 
-        Click "Open Settings" to grant permission in System Settings > Privacy & Security > Accessibility.
+        点击“打开设置”后，请在“系统设置 > 隐私与安全性 > 辅助功能”中允许 VibePet。
         """
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Later")
+        alert.addButton(withTitle: "打开设置")
+        alert.addButton(withTitle: "稍后")
+        alert.window.level = .modalPanel
+        alert.window.orderFrontRegardless()
 
         if alert.runModal() == .alertFirstButtonReturn {
             requestAccessibilityPermission()
         }
     }
+}
+
+extension Notification.Name {
+    static let collapseNotchPanelForAlert = Notification.Name("VibePet.collapseNotchPanelForAlert")
 }

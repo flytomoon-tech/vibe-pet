@@ -12,6 +12,7 @@ class NotchWindowController: NSWindowController {
     private var hostingView: NSHostingView<NotchRootView>?
     private var viewModel: NotchViewModel?
     private var collapseTimer: Timer?
+    private var notificationObservers: [Any] = []
 
     private var collapsedWidth: CGFloat = 260
     private var collapsedHeight: CGFloat = 33
@@ -63,6 +64,7 @@ class NotchWindowController: NSWindowController {
         self.expandedWidth = ew
 
         setupContent()
+        setupObservers()
 
         let trackingArea = NSTrackingArea(
             rect: panel.contentView!.bounds,
@@ -74,6 +76,12 @@ class NotchWindowController: NSWindowController {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        for observer in notificationObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
 
     private func setupContent() {
         guard let panel = window else { return }
@@ -91,6 +99,17 @@ class NotchWindowController: NSWindowController {
         hosting.autoresizingMask = [.width, .height]
         panel.contentView?.addSubview(hosting)
         self.hostingView = hosting
+    }
+
+    private func setupObservers() {
+        let observer = NotificationCenter.default.addObserver(
+            forName: .collapseNotchPanelForAlert,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.collapseImmediately()
+        }
+        notificationObservers.append(observer)
     }
 
     func toggleExpanded() {
@@ -139,6 +158,13 @@ class NotchWindowController: NSWindowController {
         withAnimation(.easeOut(duration: 0.15)) {
             viewModel.isExpanded = isExpanded
         }
+    }
+
+    private func collapseImmediately() {
+        collapseTimer?.invalidate()
+        collapseTimer = nil
+        guard isExpanded else { return }
+        toggleExpanded()
     }
 
     /// Resize panel when switching to/from settings
