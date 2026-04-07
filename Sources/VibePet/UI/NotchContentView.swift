@@ -121,7 +121,7 @@ struct NotchContentView: View {
             // Prompt input
             PromptInputView(
                 promptText: $promptText,
-                session: replyToSession ?? mostRecentSession,
+                session: replyToSession,
                 onSend: {
                     replyToSession = nil
                 }
@@ -241,13 +241,5 @@ struct NotchContentView: View {
         } else {
             return .idle
         }
-    }
-
-    private var mostRecentWorkingDirectory: String? {
-        sessionStore.activeSessions.first?.cwd
-    }
-
-    private var mostRecentSession: Session? {
-        sessionStore.activeSessions.first
     }
 }
