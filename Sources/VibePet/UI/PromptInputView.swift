@@ -70,25 +70,33 @@ struct PromptInputView: View {
     }
 
     private func sendPrompt() {
-        guard !promptText.isEmpty else { return }
+        guard !promptText.isEmpty, !isSending else { return }
 
         isSending = true
         errorMessage = nil
 
         if let session = session {
             // Reply to existing session
-            TerminalJump.sendText(to: session, text: promptText)
+            let textToSend = promptText
             promptText = ""
-            isSending = false
-            onSend()
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                TerminalJump.sendText(to: session, text: textToSend)
+                DispatchQueue.main.async {
+                    isSending = false
+                    onSend()
+                }
+            }
         } else {
             // Start new session with CLI
+            let textToSend = promptText
+            promptText = ""
+
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     let source = session?.source ?? .claude
-                    try ClaudePromptSender.sendPrompt(promptText, source: source, workingDirectory: session?.cwd)
+                    try ClaudePromptSender.sendPrompt(textToSend, source: source, workingDirectory: session?.cwd)
                     DispatchQueue.main.async {
-                        promptText = ""
                         isSending = false
                         onSend()
                     }
