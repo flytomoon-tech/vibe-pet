@@ -99,17 +99,24 @@ enum TerminalJump {
 
     private static func sendTextToTerminalApp(tty: String?, text: String) {
         guard let tty else { return }
+        // Escape special characters for AppleScript
         let escapedText = text.replacingOccurrences(of: "\\", with: "\\\\")
                               .replacingOccurrences(of: "\"", with: "\\\"")
+                              .replacingOccurrences(of: "\n", with: "\\n")
+
+        // Use keystroke to simulate typing + return key
         let script = """
         tell application "Terminal"
             repeat with w in windows
                 repeat with t in tabs of w
                     if tty of t is "\(tty)" then
-                        do script "\(escapedText)" in t
                         set selected tab of w to t
                         set index of w to 1
                         activate
+                        tell application "System Events"
+                            keystroke "\(escapedText)"
+                            keystroke return
+                        end tell
                         return
                     end if
                 end repeat
@@ -121,6 +128,7 @@ enum TerminalJump {
 
     private static func sendTextToITerm(tty: String?, text: String) {
         guard let tty else { return }
+        // iTerm2's "write text" automatically sends the text (simulates typing + return)
         let escapedText = text.replacingOccurrences(of: "\\", with: "\\\\")
                               .replacingOccurrences(of: "\"", with: "\\\"")
         let script = """
