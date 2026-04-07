@@ -6,10 +6,14 @@ struct PromptInputView: View {
     let onSend: () -> Void
     @State private var isSending = false
     @State private var errorMessage: String?
+    @AppStorage("vibepet.defaultCLI") private var defaultCLI = "claude"
 
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
+                // Source badge
+                sourceBadge
+
                 Image(systemName: "sparkles")
                     .font(.system(size: 10))
                     .foregroundColor(.orange.opacity(0.7))
@@ -69,6 +73,34 @@ struct PromptInputView: View {
         .padding(.vertical, 8)
     }
 
+    private var sourceBadge: some View {
+        let source = session?.source ?? SessionSource(rawValue: defaultCLI) ?? .claude
+        let badge: String
+        let color: Color
+
+        switch source {
+        case .claude:
+            badge = "CC"
+            color = .orange
+        case .codex:
+            badge = "CX"
+            color = .green
+        case .coco:
+            badge = "CO"
+            color = .blue
+        case .unknown:
+            badge = "?"
+            color = .gray
+        }
+
+        return Text(badge)
+            .font(.system(size: 7, weight: .bold, design: .monospaced))
+            .foregroundColor(.black)
+            .frame(width: 22, height: 18)
+            .background(color)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+
     private func sendPrompt() {
         guard !promptText.isEmpty, !isSending else { return }
 
@@ -91,11 +123,11 @@ struct PromptInputView: View {
             // Start new session with CLI
             let textToSend = promptText
             promptText = ""
+            let source = SessionSource(rawValue: defaultCLI) ?? .claude
 
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    let source = session?.source ?? .claude
-                    try ClaudePromptSender.sendPrompt(textToSend, source: source, workingDirectory: session?.cwd)
+                    try ClaudePromptSender.sendPrompt(textToSend, source: source, workingDirectory: nil)
                     DispatchQueue.main.async {
                         isSending = false
                         onSend()
