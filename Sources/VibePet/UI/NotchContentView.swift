@@ -40,6 +40,7 @@ struct NotchRootView: View {
 struct NotchContentView: View {
     let viewModel: NotchViewModel
     @State private var promptText = ""
+    @State private var replyToSession: Session?
 
     private var sessionStore: SessionStore { viewModel.sessionStore }
     private var isExpanded: Bool { viewModel.isExpanded }
@@ -98,9 +99,34 @@ struct NotchContentView: View {
             // Prompt input
             PromptInputView(
                 promptText: $promptText,
-                workingDirectory: mostRecentWorkingDirectory,
-                onSend: {}
+                workingDirectory: replyToSession?.cwd ?? mostRecentWorkingDirectory,
+                onSend: {
+                    replyToSession = nil
+                }
             )
+            .overlay(alignment: .topLeading) {
+                if let session = replyToSession {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrowshape.turn.up.left.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(.blue)
+                        Text("Reply to \(session.cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? session.id.prefix(8).description)")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.blue)
+                        Button(action: { replyToSession = nil }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .padding(4)
+                }
+            }
 
             Rectangle()
                 .fill(Color.white.opacity(0.06))
@@ -160,9 +186,15 @@ struct NotchContentView: View {
                 ScrollView {
                     VStack(spacing: 2) {
                         ForEach(sessionStore.allSessions) { session in
-                            SessionRowView(session: session, onArchive: {
-                                sessionStore.archiveSession(session)
-                            })
+                            SessionRowView(
+                                session: session,
+                                onArchive: {
+                                    sessionStore.archiveSession(session)
+                                },
+                                onReply: {
+                                    replyToSession = session
+                                }
+                            )
                             .onTapGesture { viewModel.onSessionClick(session) }
                         }
                     }

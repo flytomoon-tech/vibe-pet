@@ -1,6 +1,11 @@
 import SwiftUI
 import AppKit
 
+// Custom panel that can become key to accept text input
+class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
 class NotchWindowController: NSWindowController {
     private let sessionStore: SessionStore
     private var isExpanded = false
@@ -32,7 +37,7 @@ class NotchWindowController: NSWindowController {
         let x = screenFrame.midX - cw / 2
         let y = screenFrame.maxY - ch
 
-        let panel = NSPanel(
+        let panel = KeyablePanel(
             contentRect: NSRect(x: x, y: y, width: cw, height: ch),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
@@ -46,6 +51,9 @@ class NotchWindowController: NSWindowController {
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         panel.isMovable = false
         panel.hidesOnDeactivate = false
+
+        // Allow text input
+        panel.acceptsMouseMovedEvents = true
 
         super.init(window: panel)
 
