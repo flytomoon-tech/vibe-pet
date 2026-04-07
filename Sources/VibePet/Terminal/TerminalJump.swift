@@ -40,11 +40,11 @@ enum TerminalJump {
             return
         }
 
-        logDebug("sendText: session=\(session.id) bundleId=\(bundleId) tty=\(session.tty ?? "nil") text=\(text.prefix(50))")
+        logDebug("sendText: session=\(session.id) source=\(session.source.rawValue) bundleId=\(bundleId) tty=\(session.tty ?? "nil") text=\(text.prefix(50))")
 
         switch bundleId {
         case "com.apple.Terminal":
-            sendTextToTerminalApp(tty: session.tty, text: text)
+            sendTextToTerminalApp(tty: session.tty, text: text, source: session.source)
         case "com.googlecode.iterm2":
             sendTextToITerm(tty: session.tty, text: text)
         default:
@@ -97,7 +97,7 @@ enum TerminalJump {
         }
     }
 
-    private static func sendTextToTerminalApp(tty: String?, text: String) {
+    private static func sendTextToTerminalApp(tty: String?, text: String, source: SessionSource) {
         guard let tty else { return }
         // Remove any newlines/returns from the text - treat it as single line input
         let cleanText = text.replacingOccurrences(of: "\n", with: " ")
@@ -107,22 +107,48 @@ enum TerminalJump {
         let escapedText = cleanText.replacingOccurrences(of: "\\", with: "\\\\")
                                    .replacingOccurrences(of: "\"", with: "\\\"")
 
-        let script = """
-        tell application "Terminal"
-            repeat with w in windows
-                repeat with t in tabs of w
-                    if tty of t is "\(tty)" then
-                        do script "\(escapedText)" in t
-                        set selected tab of w to t
-                        set index of w to 1
-                        activate
-                        return
-                    end if
+        // For Codex, do script only inputs text + newline but doesn't execute
+        // We need to send an additional empty command to trigger execution
+        let needsExtraReturn = (source == .codex)
+
+        let script: String
+        if needsExtraReturn {
+            script = """
+            tell application "Terminal"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if tty of t is "\(tty)" then
+                            do script "\(escapedText)" in t
+                            delay 0.1
+                            do script "" in t
+                            set selected tab of w to t
+                            set index of w to 1
+                            activate
+                            return
+                        end if
+                    end repeat
                 end repeat
-            end repeat
-        end tell
-        """
-        logDebug("Executing AppleScript for Terminal.app, text=\(cleanText.prefix(50))")
+            end tell
+            """
+        } else {
+            script = """
+            tell application "Terminal"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if tty of t is "\(tty)" then
+                            do script "\(escapedText)" in t
+                            set selected tab of w to t
+                            set index of w to 1
+                            activate
+                            return
+                        end if
+                    end repeat
+                end repeat
+            end tell
+            """
+        }
+
+        logDebug("Executing AppleScript for Terminal.app, source=\(source.rawValue), needsExtraReturn=\(needsExtraReturn), text=\(cleanText.prefix(50))")
         runAppleScript(script)
     }
 
