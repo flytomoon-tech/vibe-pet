@@ -7,12 +7,34 @@ struct PromptInputView: View {
     @State private var isSending = false
     @State private var errorMessage: String?
     @AppStorage("vibepet.defaultCLI") private var defaultCLI = "claude"
+    @State private var showCLIPicker = false
 
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
-                // Source badge
-                sourceBadge
+                // Source badge - clickable when no session selected
+                if session == nil {
+                    Menu {
+                        ForEach(availableCLIs(), id: \.0) { cli in
+                            Button(action: {
+                                defaultCLI = cli.0
+                            }) {
+                                HStack {
+                                    Text(cli.1)
+                                    if defaultCLI == cli.0 {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        sourceBadge
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                } else {
+                    sourceBadge
+                }
 
                 Image(systemName: "sparkles")
                     .font(.system(size: 10))
@@ -106,6 +128,40 @@ struct PromptInputView: View {
             .background(color)
             .clipShape(RoundedRectangle(cornerRadius: 3))
             .id(defaultCLI) // Force refresh when defaultCLI changes
+    }
+
+    private func availableCLIs() -> [(String, String)] {
+        var clis: [(String, String)] = []
+        if isHookActive(for: "claude") {
+            clis.append(("claude", "Claude Code"))
+        }
+        if isHookActive(for: "codex") {
+            clis.append(("codex", "Codex"))
+        }
+        if isHookActive(for: "coco") {
+            clis.append(("coco", "Coco"))
+        }
+        // Fallback if none active
+        if clis.isEmpty {
+            clis.append(("claude", "Claude Code"))
+        }
+        return clis
+    }
+
+    private func isHookActive(for source: String) -> Bool {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let path: String
+        switch source {
+        case "claude": path = "\(home)/.claude/settings.json"
+        case "codex": path = "\(home)/.codex/hooks.json"
+        case "coco": path = "\(home)/.trae/traecli.yaml"
+        default: return false
+        }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let str = String(data: data, encoding: .utf8) else {
+            return false
+        }
+        return str.contains("vibe-pet-bridge")
     }
 
     private func sendPrompt() {
