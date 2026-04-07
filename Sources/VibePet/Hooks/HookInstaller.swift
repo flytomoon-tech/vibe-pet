@@ -138,31 +138,9 @@ final class HookInstaller {
 
         backup(file: yamlPath)
 
-        var content = (try? String(contentsOf: yamlPath, encoding: .utf8)) ?? ""
-
-        // First remove any existing vibe-pet hook block
-        content = removeCocoVibePetBlock(from: content)
-
-        // Append our hook entry to the hooks array
-        let hookBlock = """
-          - type: command
-            command: '\(bridgeCommand) --source coco'
-            matchers:
-              - event: user_prompt_submit
-              - event: post_tool_use
-              - event: stop
-              - event: subagent_stop
-        """
-
-        if content.contains("\nhooks:") || content.hasPrefix("hooks:") {
-            // Append to existing hooks array
-            content += "\n" + hookBlock + "\n"
-        } else {
-            // Create hooks section
-            content += "\nhooks:\n" + hookBlock + "\n"
-        }
-
-        try content.write(to: yamlPath, atomically: true, encoding: .utf8)
+        let content = (try? String(contentsOf: yamlPath, encoding: .utf8)) ?? ""
+        let updated = updateCocoHooks(in: content, includeVibePetHook: true)
+        try updated.write(to: yamlPath, atomically: true, encoding: .utf8)
     }
 
     private func uninstallCocoHooks() throws {
@@ -171,82 +149,208 @@ final class HookInstaller {
         guard content.contains("vibe-pet-bridge") else { return }
         backup(file: path)
 
-        let cleaned = removeCocoVibePetBlock(from: content)
+        let cleaned = updateCocoHooks(in: content, includeVibePetHook: false)
         try cleaned.write(to: path, atomically: true, encoding: .utf8)
-    }
-
-    /// Remove the vibe-pet hook block from Coco YAML content
-    private func removeCocoVibePetBlock(from content: String) -> String {
-        let lines = content.components(separatedBy: "\n")
-        var result: [String] = []
-        var i = 0
-
-        while i < lines.count {
-            let line = lines[i]
-
-            // Detect start of a hook entry: "  - type: command"
-            // Then look ahead to see if it contains vibe-pet-bridge
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("- type: command") {
-                // Collect this entire hook block
-                var block: [String] = [line]
-                let baseIndent = line.prefix(while: { $0 == " " }).count
-                var j = i + 1
-
-                while j < lines.count {
-                    let nextLine = lines[j]
-                    let trimmed = nextLine.trimmingCharacters(in: .whitespaces)
-                    if trimmed.isEmpty { j += 1; continue }
-                    let indent = nextLine.prefix(while: { $0 == " " }).count
-                    // If indent is greater than base, it's part of this block
-                    // If it's another "- type:" at same level, it's a new block
-                    if indent > baseIndent || (indent == baseIndent && !trimmed.hasPrefix("- ")) {
-                        block.append(nextLine)
-                        j += 1
-                    } else {
-                        break
-                    }
-                }
-
-                let blockText = block.joined(separator: "\n")
-                if blockText.contains("vibe-pet-bridge") || blockText.contains("VibePet") {
-                    // Skip this block (also skip preceding comment)
-                    if let last = result.last, last.contains("VibePet") {
-                        result.removeLast()
-                    }
-                    i = j
-                    continue
-                } else if blockText.trimmingCharacters(in: .whitespacesAndNewlines) == "- type: command" {
-                    // Empty/orphaned entry, skip it
-                    i = j
-                    continue
-                } else {
-                    result.append(contentsOf: block)
-                    i = j
-                    continue
-                }
-            }
-
-            // Skip standalone VibePet comment lines
-            if line.contains("# VibePet") {
-                i += 1
-                continue
-            }
-
-            result.append(line)
-            i += 1
-        }
-
-        // Clean up trailing empty lines
-        while result.last?.trimmingCharacters(in: .whitespaces).isEmpty == true && result.count > 1 {
-            result.removeLast()
-        }
-
-        return result.joined(separator: "\n") + "\n"
     }
 
     private func isVibePetCommand(_ cmd: String?) -> Bool {
         guard let cmd else { return false }
         return cmd.contains("vibe-pet-bridge") || cmd.contains("vibe-cat-bridge")
+    }
+
+    private struct CocoHookItem {
+        let lines: [String]
+        let command: String?
+    }
+
+    private struct CocoHooksSection {
+        let keyLine: Int
+        let bodyEnd: Int
+        let indent: Int
+        let itemIndent: Int
+        let leadingLines: [String]
+        let items: [CocoHookItem]
+    }
+
+    private func updateCocoHooks(in content: String, includeVibePetHook: Bool) -> String {
+        var lines = yamlLines(from: content)
+        let vibePetLines = cocoVibePetHookLines(itemIndent: 2)
+
+        if let section = parseCocoHooksSection(in: lines) {
+            var items = section.items.filter { !isVibePetCommand($0.command) && !isVibePetHookBlock($0.lines) }
+
+            if includeVibePetHook {
+                items.append(
+                    CocoHookItem(
+                        lines: cocoVibePetHookLines(itemIndent: section.itemIndent),
+                        command: "\(bridgeCommand) --source coco"
+                    )
+                )
+            }
+
+            let replacement: [String]
+            if items.isEmpty {
+                replacement = []
+            } else {
+                replacement = ["\(String(repeating: " ", count: section.indent))hooks:"]
+                    + section.leadingLines
+                    + items.flatMap(\.lines)
+            }
+
+            lines.replaceSubrange(section.keyLine..<section.bodyEnd, with: replacement)
+            return renderYAML(lines)
+        }
+
+        guard includeVibePetHook else { return renderYAML(lines) }
+
+        if !lines.isEmpty, lines.last?.trimmingCharacters(in: .whitespaces).isEmpty == false {
+            lines.append("")
+        }
+        lines.append("hooks:")
+        lines.append(contentsOf: vibePetLines)
+        return renderYAML(lines)
+    }
+
+    private func parseCocoHooksSection(in lines: [String]) -> CocoHooksSection? {
+        for index in lines.indices {
+            let line = lines[index]
+            let trimmed = yamlTrimmed(line)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#"), indentation(of: line) == 0 else { continue }
+            guard isHooksKeyLine(trimmed) else { continue }
+
+            let indent = indentation(of: line)
+            var bodyEnd = index + 1
+            while bodyEnd < lines.count {
+                let nextLine = lines[bodyEnd]
+                let nextTrimmed = yamlTrimmed(nextLine)
+                if !nextTrimmed.isEmpty && !nextTrimmed.hasPrefix("#") && indentation(of: nextLine) <= indent {
+                    break
+                }
+                bodyEnd += 1
+            }
+
+            let bodyLines = Array(lines[(index + 1)..<bodyEnd])
+            var leadingLines: [String] = []
+            var items: [CocoHookItem] = []
+            var currentItemLines: [String] = []
+            var itemIndent: Int?
+
+            for bodyLine in bodyLines {
+                let bodyTrimmed = yamlTrimmed(bodyLine)
+                let bodyIndent = indentation(of: bodyLine)
+                let isCandidateItem = bodyTrimmed.hasPrefix("- ")
+                let isNewItem: Bool
+
+                if isCandidateItem {
+                    if let itemIndent {
+                        isNewItem = bodyIndent == itemIndent
+                    } else {
+                        isNewItem = bodyIndent > indent
+                    }
+                } else {
+                    isNewItem = false
+                }
+
+                if isNewItem {
+                    if !currentItemLines.isEmpty {
+                        items.append(CocoHookItem(lines: currentItemLines, command: commandValue(in: currentItemLines)))
+                    }
+                    currentItemLines = [bodyLine]
+                    itemIndent = bodyIndent
+                    continue
+                }
+
+                if currentItemLines.isEmpty {
+                    if bodyTrimmed.isEmpty || bodyTrimmed.hasPrefix("#") {
+                        leadingLines.append(bodyLine)
+                    }
+                } else {
+                    currentItemLines.append(bodyLine)
+                }
+            }
+
+            if !currentItemLines.isEmpty {
+                items.append(CocoHookItem(lines: currentItemLines, command: commandValue(in: currentItemLines)))
+            }
+
+            return CocoHooksSection(
+                keyLine: index,
+                bodyEnd: bodyEnd,
+                indent: indent,
+                itemIndent: itemIndent ?? (indent + 2),
+                leadingLines: leadingLines,
+                items: items
+            )
+        }
+
+        return nil
+    }
+
+    private func cocoVibePetHookLines(itemIndent: Int) -> [String] {
+        let nestedIndent = itemIndent + 2
+        return [
+            "\(String(repeating: " ", count: itemIndent))- type: command",
+            "\(String(repeating: " ", count: nestedIndent))command: '\(bridgeCommand) --source coco'",
+            "\(String(repeating: " ", count: nestedIndent))matchers:",
+            "\(String(repeating: " ", count: nestedIndent + 2))- event: user_prompt_submit",
+            "\(String(repeating: " ", count: nestedIndent + 2))- event: post_tool_use",
+            "\(String(repeating: " ", count: nestedIndent + 2))- event: stop",
+            "\(String(repeating: " ", count: nestedIndent + 2))- event: subagent_stop",
+        ]
+    }
+
+    private func isHooksKeyLine(_ trimmedLine: String) -> Bool {
+        guard !trimmedLine.hasPrefix("- "), let colon = trimmedLine.firstIndex(of: ":") else { return false }
+        return trimmedLine[..<colon] == "hooks"
+    }
+
+    private func commandValue(in itemLines: [String]) -> String? {
+        for line in itemLines {
+            let trimmed = yamlTrimmed(line)
+            if let value = yamlValue(for: "command", in: trimmed) {
+                return value
+            }
+
+            if trimmed.hasPrefix("- "),
+               let value = yamlValue(for: "command", in: String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private func yamlValue(for key: String, in trimmedLine: String) -> String? {
+        guard trimmedLine.hasPrefix("\(key):") else { return nil }
+        let rawValue = trimmedLine.dropFirst(key.count + 1).trimmingCharacters(in: .whitespaces)
+        guard !rawValue.isEmpty else { return nil }
+        if rawValue.hasPrefix("'"), rawValue.hasSuffix("'"), rawValue.count >= 2 {
+            return String(rawValue.dropFirst().dropLast())
+        }
+        if rawValue.hasPrefix("\""), rawValue.hasSuffix("\""), rawValue.count >= 2 {
+            return String(rawValue.dropFirst().dropLast())
+        }
+        return String(rawValue)
+    }
+
+    private func isVibePetHookBlock(_ lines: [String]) -> Bool {
+        lines.contains { isVibePetCommand(commandValue(in: [$0])) || $0.contains("vibe-pet-bridge") || $0.contains("vibe-cat-bridge") }
+    }
+
+    private func yamlLines(from content: String) -> [String] {
+        content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    }
+
+    private func renderYAML(_ lines: [String]) -> String {
+        let rendered = lines.joined(separator: "\n").trimmingCharacters(in: CharacterSet(charactersIn: "\n"))
+        return rendered.isEmpty ? "" : rendered + "\n"
+    }
+
+    private func indentation(of line: String) -> Int {
+        line.prefix(while: { $0 == " " }).count
+    }
+
+    private func yamlTrimmed(_ line: String) -> String {
+        line.trimmingCharacters(in: .whitespaces)
     }
 
     private func uninstallClaudeHooks() throws {

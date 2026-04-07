@@ -2,6 +2,21 @@ import Foundation
 import AppKit
 
 enum TerminalJump {
+    private static func logDebug(_ message: String) {
+        let logFile = "/tmp/vibe-pet-terminal-jump.log"
+        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        let line = "[\(timestamp)] \(message)\n"
+        if let data = line.data(using: .utf8) {
+            if let handle = FileHandle(forWritingAtPath: logFile) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                handle.closeFile()
+            } else {
+                try? data.write(to: URL(fileURLWithPath: logFile))
+            }
+        }
+    }
+
     static func jump(to session: Session) {
         guard let bundleId = session.terminalBundleId else {
             // Fallback: try Terminal.app
@@ -16,6 +31,34 @@ enum TerminalJump {
             jumpToITerm(tty: session.tty)
         default:
             activateApp(bundleId: bundleId)
+        }
+    }
+
+    static func sendText(to session: Session, text: String) {
+        guard let bundleId = session.terminalBundleId else {
+            logDebug("sendText: no bundleId for session \(session.id)")
+            return
+        }
+
+        // Check accessibility permission first
+        if !PermissionChecker.checkAccessibilityPermission() {
+            logDebug("sendText: accessibility permission not granted")
+            DispatchQueue.main.async {
+                PermissionChecker.showAccessibilityAlert()
+            }
+            return
+        }
+
+        logDebug("sendText: session=\(session.id) source=\(session.source.rawValue) bundleId=\(bundleId) tty=\(session.tty ?? "nil") text=\(text.prefix(50))")
+
+        switch bundleId {
+        case "com.apple.Terminal":
+            sendTextToTerminalApp(tty: session.tty, text: text, source: session.source)
+        case "com.googlecode.iterm2":
+            sendTextToITerm(tty: session.tty, text: text)
+        default:
+            logDebug("sendText: unsupported bundleId \(bundleId)")
+            break
         }
     }
 
@@ -61,6 +104,86 @@ enum TerminalJump {
         } else {
             activateApp(bundleId: "com.googlecode.iterm2")
         }
+    }
+
+    private static func sendTextToTerminalApp(tty: String?, text: String, source: SessionSource) {
+        guard let tty else { return }
+        // Remove any newlines/returns from the text - treat it as single line input
+        let cleanText = text.replacingOccurrences(of: "\n", with: " ")
+                            .replacingOccurrences(of: "\r", with: " ")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let escapedText = cleanText.replacingOccurrences(of: "\\", with: "\\\\")
+                                   .replacingOccurrences(of: "\"", with: "\\\"")
+
+        // For Codex, do script only inputs text + newline but doesn't execute
+        // We need to send an additional empty command to trigger execution
+        let needsExtraReturn = (source == .codex)
+
+        let script: String
+        if needsExtraReturn {
+            script = """
+            tell application "Terminal"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if tty of t is "\(tty)" then
+                            do script "\(escapedText)" in t
+                            delay 0.1
+                            do script "" in t
+                            set selected tab of w to t
+                            set index of w to 1
+                            activate
+                            return
+                        end if
+                    end repeat
+                end repeat
+            end tell
+            """
+        } else {
+            script = """
+            tell application "Terminal"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if tty of t is "\(tty)" then
+                            do script "\(escapedText)" in t
+                            set selected tab of w to t
+                            set index of w to 1
+                            activate
+                            return
+                        end if
+                    end repeat
+                end repeat
+            end tell
+            """
+        }
+
+        logDebug("Executing AppleScript for Terminal.app, source=\(source.rawValue), needsExtraReturn=\(needsExtraReturn), text=\(cleanText.prefix(50))")
+        runAppleScript(script)
+    }
+
+    private static func sendTextToITerm(tty: String?, text: String) {
+        guard let tty else { return }
+        // iTerm2's "write text" automatically sends the text (simulates typing + return)
+        let escapedText = text.replacingOccurrences(of: "\\", with: "\\\\")
+                              .replacingOccurrences(of: "\"", with: "\\\"")
+        let script = """
+        tell application "iTerm2"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    repeat with s in sessions of t
+                        if tty of s is "\(tty)" then
+                            tell s to write text "\(escapedText)"
+                            select t
+                            tell w to select
+                            activate
+                            return
+                        end if
+                    end repeat
+                end repeat
+            end repeat
+        end tell
+        """
+        runAppleScript(script)
     }
 
     private static func activateApp(bundleId: String) {

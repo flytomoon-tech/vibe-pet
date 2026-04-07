@@ -3,6 +3,7 @@ import SwiftUI
 struct SessionRowView: View {
     let session: Session
     var onArchive: (() -> Void)?
+    var onReply: (() -> Void)?
     @State private var now = Date()
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -31,6 +32,15 @@ struct SessionRowView: View {
                 Text(timeAgo)
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(.gray)
+
+                if let onReply {
+                    Button(action: onReply) {
+                        Image(systemName: "arrowshape.turn.up.left.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
 
                 if let onArchive, session.status != .archived {
                     Button(action: onArchive) {

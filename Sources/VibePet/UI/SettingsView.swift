@@ -36,6 +36,7 @@ struct SettingsWindowView: View {
     @AppStorage("vibepet.soundEnabled") private var soundEnabled = true
     @AppStorage("vibepet.launchAtLogin") private var launchAtLogin = false
     @AppStorage("vibepet.soundVolume") private var soundVolume = 0.5
+    @AppStorage("vibepet.defaultCLI") private var defaultCLI = "claude"
 
     var body: some View {
         ScrollView {
@@ -67,6 +68,8 @@ struct SettingsWindowView: View {
                 // General
                 settingsSection("General") {
                     settingsToggleRow("Launch at login", icon: "power", iconColor: .green, isOn: $launchAtLogin)
+                    Divider().padding(.leading, 40)
+                    settingsPickerRow("Default CLI", icon: "terminal", iconColor: .purple, selection: $defaultCLI, options: availableCLIs())
                 }
 
                 // Hooks
@@ -189,6 +192,24 @@ struct SettingsWindowView: View {
         AsyncActionButton(label: label, icon: icon, iconColor: iconColor, action: action)
     }
 
+    private func settingsPickerRow(_ label: String, icon: String, iconColor: Color, selection: Binding<String>, options: [(String, String)]) -> some View {
+        HStack(spacing: 10) {
+            iconBadge(icon, color: iconColor)
+            Text(label)
+                .font(.system(size: 13))
+                .foregroundColor(.primary)
+            Spacer()
+            Picker("", selection: selection) {
+                ForEach(options, id: \.0) { option in
+                    Text(option.1).tag(option.0)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 120)
+        }
+        .frame(height: 32)
+    }
+
     private func iconBadge(_ name: String, color: Color) -> some View {
         Image(systemName: name)
             .font(.system(size: 12, weight: .medium))
@@ -199,6 +220,24 @@ struct SettingsWindowView: View {
     }
 
     // MARK: - Helpers
+
+    private func availableCLIs() -> [(String, String)] {
+        var clis: [(String, String)] = []
+        if hookStatus(for: "claude") == "Active" {
+            clis.append(("claude", "Claude Code"))
+        }
+        if hookStatus(for: "codex") == "Active" {
+            clis.append(("codex", "Codex"))
+        }
+        if hookStatus(for: "coco") == "Active" {
+            clis.append(("coco", "Coco"))
+        }
+        // Fallback if none active
+        if clis.isEmpty {
+            clis.append(("claude", "Claude Code"))
+        }
+        return clis
+    }
 
     private func hookStatus(for source: String) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path

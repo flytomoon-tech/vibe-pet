@@ -39,6 +39,8 @@ struct NotchRootView: View {
 
 struct NotchContentView: View {
     let viewModel: NotchViewModel
+    @State private var promptText = ""
+    @State private var replyToSession: Session?
 
     private var sessionStore: SessionStore { viewModel.sessionStore }
     private var isExpanded: Bool { viewModel.isExpanded }
@@ -94,6 +96,41 @@ struct NotchContentView: View {
                 .fill(Color.white.opacity(0.06))
                 .frame(height: 0.5)
 
+            // Reply indicator (above input)
+            if let session = replyToSession {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrowshape.turn.up.left.fill")
+                        .font(.system(size: 8))
+                        .foregroundColor(.blue)
+                    Text("Reply to \(session.cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? session.id.prefix(8).description)")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(.blue)
+                    Spacer()
+                    Button(action: { replyToSession = nil }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.1))
+            }
+
+            // Prompt input
+            PromptInputView(
+                promptText: $promptText,
+                session: replyToSession,
+                onSend: {
+                    replyToSession = nil
+                }
+            )
+
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(height: 0.5)
+
             sessionList
         }
     }
@@ -138,25 +175,46 @@ struct NotchContentView: View {
     }
 
     private var sessionList: some View {
-        Group {
+        let sessionCount = sessionStore.allSessions.count
+        let sessionRowHeight: CGFloat = 70
+        let maxVisibleSessions = 3
+
+        // Calculate height: show up to 3 sessions, then scroll
+        let listHeight: CGFloat
+        if sessionCount == 0 {
+            listHeight = 60 // Empty state height
+        } else if sessionCount <= maxVisibleSessions {
+            listHeight = CGFloat(sessionCount) * sessionRowHeight + 12 // padding
+        } else {
+            listHeight = CGFloat(maxVisibleSessions) * sessionRowHeight + 12
+        }
+
+        return Group {
             if sessionStore.allSessions.isEmpty {
                 Text("No active sessions")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(Color.white.opacity(0.35))
-                    .padding(.vertical, 16)
+                    .frame(height: listHeight)
             } else {
                 ScrollView {
                     VStack(spacing: 2) {
                         ForEach(sessionStore.allSessions) { session in
-                            SessionRowView(session: session, onArchive: {
-                                sessionStore.archiveSession(session)
-                            })
+                            SessionRowView(
+                                session: session,
+                                onArchive: {
+                                    sessionStore.archiveSession(session)
+                                },
+                                onReply: {
+                                    replyToSession = session
+                                }
+                            )
                             .onTapGesture { viewModel.onSessionClick(session) }
                         }
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
                 }
+                .frame(height: listHeight)
             }
         }
     }
