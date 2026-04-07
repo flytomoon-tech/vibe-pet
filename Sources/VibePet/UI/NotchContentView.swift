@@ -175,12 +175,26 @@ struct NotchContentView: View {
     }
 
     private var sessionList: some View {
-        Group {
+        let sessionCount = sessionStore.allSessions.count
+        let sessionRowHeight: CGFloat = 70
+        let maxVisibleSessions = 3
+
+        // Calculate height: show up to 3 sessions, then scroll
+        let listHeight: CGFloat
+        if sessionCount == 0 {
+            listHeight = 60 // Empty state height
+        } else if sessionCount <= maxVisibleSessions {
+            listHeight = CGFloat(sessionCount) * sessionRowHeight + 12 // padding
+        } else {
+            listHeight = CGFloat(maxVisibleSessions) * sessionRowHeight + 12
+        }
+
+        return Group {
             if sessionStore.allSessions.isEmpty {
                 Text("No active sessions")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(Color.white.opacity(0.35))
-                    .padding(.vertical, 16)
+                    .frame(height: listHeight)
             } else {
                 ScrollView {
                     VStack(spacing: 2) {
@@ -200,6 +214,7 @@ struct NotchContentView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
                 }
+                .frame(height: listHeight)
             }
         }
     }

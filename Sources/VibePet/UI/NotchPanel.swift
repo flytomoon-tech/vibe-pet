@@ -104,13 +104,29 @@ class NotchWindowController: NSWindowController {
 
         let sessionCount = sessionStore.allSessions.count
         let expandedContentHeight: CGFloat
+
+        // Calculate heights:
+        // - Header: ~44
+        // - Prompt input area: ~80 (includes reply indicator if present)
+        // - Session row: ~70 each
+        // - Padding: ~12
+
+        let headerHeight: CGFloat = 44
+        let promptInputHeight: CGFloat = 80
+        let sessionRowHeight: CGFloat = 70
+        let padding: CGFloat = 12
+
         if sessionCount == 0 {
-            expandedContentHeight = 80
+            // No sessions: header + input + empty state
+            expandedContentHeight = headerHeight + promptInputHeight + 60
+        } else if sessionCount <= 3 {
+            // 1-3 sessions: show all without scrolling
+            expandedContentHeight = headerHeight + promptInputHeight + CGFloat(sessionCount) * sessionRowHeight + padding
         } else {
-            // Estimate: header(44) + rows + padding
-            let perRow: CGFloat = 70
-            expandedContentHeight = min(44 + CGFloat(sessionCount) * perRow + 12, 420)
+            // More than 3: show 3 sessions + scrolling
+            expandedContentHeight = headerHeight + promptInputHeight + 3 * sessionRowHeight + padding
         }
+
         let w = isExpanded ? expandedWidth : collapsedWidth
         let height = isExpanded ? (collapsedHeight + expandedContentHeight) : collapsedHeight
 
