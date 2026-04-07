@@ -96,6 +96,28 @@ struct NotchContentView: View {
                 .fill(Color.white.opacity(0.06))
                 .frame(height: 0.5)
 
+            // Reply indicator (above input)
+            if let session = replyToSession {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrowshape.turn.up.left.fill")
+                        .font(.system(size: 8))
+                        .foregroundColor(.blue)
+                    Text("Reply to \(session.cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? session.id.prefix(8).description)")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(.blue)
+                    Spacer()
+                    Button(action: { replyToSession = nil }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.1))
+            }
+
             // Prompt input
             PromptInputView(
                 promptText: $promptText,
@@ -104,29 +126,6 @@ struct NotchContentView: View {
                     replyToSession = nil
                 }
             )
-            .overlay(alignment: .topLeading) {
-                if let session = replyToSession {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrowshape.turn.up.left.fill")
-                            .font(.system(size: 8))
-                            .foregroundColor(.blue)
-                        Text("Reply to \(session.cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? session.id.prefix(8).description)")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundColor(.blue)
-                        Button(action: { replyToSession = nil }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 10))
-                                .foregroundColor(.gray)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.blue.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .padding(4)
-                }
-            }
 
             Rectangle()
                 .fill(Color.white.opacity(0.06))
