@@ -14,24 +14,40 @@ struct PromptInputView: View {
             HStack(spacing: 6) {
                 // Source badge - clickable when no session selected
                 if session == nil {
-                    Menu {
-                        ForEach(availableCLIs(), id: \.0) { cli in
-                            Button(action: {
-                                defaultCLI = cli.0
-                            }) {
-                                HStack {
-                                    Text(cli.1)
-                                    if defaultCLI == cli.0 {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
+                    Button(action: {
+                        showCLIPicker.toggle()
+                    }) {
                         sourceBadge
                     }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showCLIPicker, arrowEdge: .bottom) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(availableCLIs(), id: \.0) { cli in
+                                Button(action: {
+                                    defaultCLI = cli.0
+                                    showCLIPicker = false
+                                }) {
+                                    HStack {
+                                        Text(cli.1)
+                                            .font(.system(size: 12))
+                                        Spacer()
+                                        if defaultCLI == cli.0 {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .background(defaultCLI == cli.0 ? Color.blue.opacity(0.1) : Color.clear)
+                            }
+                        }
+                        .frame(width: 150)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                    }
                 } else {
                     sourceBadge
                 }
