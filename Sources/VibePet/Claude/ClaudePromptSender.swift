@@ -2,29 +2,48 @@ import Foundation
 
 final class ClaudePromptSender {
     enum SendError: Error {
-        case claudeNotFound
+        case cliNotFound
         case executionFailed(String)
     }
 
-    private static let possibleClaudePaths = [
+    private static let claudePaths = [
         "/usr/local/bin/claude",
         "/opt/homebrew/bin/claude",
         "/usr/bin/claude",
         "~/.local/bin/claude"
     ]
 
-    static func findClaudePath() -> String? {
-        for path in possibleClaudePaths {
+    private static let codexPaths = [
+        "/usr/local/bin/codex",
+        "/opt/homebrew/bin/codex",
+        "/usr/bin/codex",
+        "~/.local/bin/codex"
+    ]
+
+    static func findCLIPath(for source: SessionSource) -> String? {
+        let paths: [String]
+        let command: String
+
+        switch source {
+        case .codex:
+            paths = codexPaths
+            command = "codex"
+        case .claude, .coco, .unknown:
+            paths = claudePaths
+            command = "claude"
+        }
+
+        for path in paths {
             let expanded = NSString(string: path).expandingTildeInPath
             if FileManager.default.fileExists(atPath: expanded) {
                 return expanded
             }
         }
 
-        // Try `which claude`
+        // Try `which`
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["claude"]
+        process.arguments = [command]
         let pipe = Pipe()
         process.standardOutput = pipe
 
@@ -45,13 +64,13 @@ final class ClaudePromptSender {
         return nil
     }
 
-    static func sendPrompt(_ prompt: String, workingDirectory: String? = nil) throws {
-        guard let claudePath = findClaudePath() else {
-            throw SendError.claudeNotFound
+    static func sendPrompt(_ prompt: String, source: SessionSource = .claude, workingDirectory: String? = nil) throws {
+        guard let cliPath = findCLIPath(for: source) else {
+            throw SendError.cliNotFound
         }
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: claudePath)
+        process.executableURL = URL(fileURLWithPath: cliPath)
         process.arguments = [prompt]
 
         if let cwd = workingDirectory {

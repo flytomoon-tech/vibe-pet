@@ -82,18 +82,19 @@ struct PromptInputView: View {
             isSending = false
             onSend()
         } else {
-            // Start new session with claude CLI
+            // Start new session with CLI
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    try ClaudePromptSender.sendPrompt(promptText, workingDirectory: session?.cwd)
+                    let source = session?.source ?? .claude
+                    try ClaudePromptSender.sendPrompt(promptText, source: source, workingDirectory: session?.cwd)
                     DispatchQueue.main.async {
                         promptText = ""
                         isSending = false
                         onSend()
                     }
-                } catch ClaudePromptSender.SendError.claudeNotFound {
+                } catch ClaudePromptSender.SendError.cliNotFound {
                     DispatchQueue.main.async {
-                        errorMessage = "Claude CLI not found"
+                        errorMessage = "CLI not found"
                         isSending = false
                     }
                 } catch ClaudePromptSender.SendError.executionFailed(let msg) {

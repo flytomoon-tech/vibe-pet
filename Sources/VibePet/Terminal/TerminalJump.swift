@@ -2,6 +2,21 @@ import Foundation
 import AppKit
 
 enum TerminalJump {
+    private static func logDebug(_ message: String) {
+        let logFile = "/tmp/vibe-pet-terminal-jump.log"
+        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        let line = "[\(timestamp)] \(message)\n"
+        if let data = line.data(using: .utf8) {
+            if let handle = FileHandle(forWritingAtPath: logFile) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                handle.closeFile()
+            } else {
+                try? data.write(to: URL(fileURLWithPath: logFile))
+            }
+        }
+    }
+
     static func jump(to session: Session) {
         guard let bundleId = session.terminalBundleId else {
             // Fallback: try Terminal.app
@@ -21,8 +36,11 @@ enum TerminalJump {
 
     static func sendText(to session: Session, text: String) {
         guard let bundleId = session.terminalBundleId else {
+            logDebug("sendText: no bundleId for session \(session.id)")
             return
         }
+
+        logDebug("sendText: session=\(session.id) bundleId=\(bundleId) tty=\(session.tty ?? "nil") text=\(text.prefix(50))")
 
         switch bundleId {
         case "com.apple.Terminal":
@@ -30,6 +48,7 @@ enum TerminalJump {
         case "com.googlecode.iterm2":
             sendTextToITerm(tty: session.tty, text: text)
         default:
+            logDebug("sendText: unsupported bundleId \(bundleId)")
             break
         }
     }
