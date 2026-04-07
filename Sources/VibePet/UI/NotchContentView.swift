@@ -39,6 +39,7 @@ struct NotchRootView: View {
 
 struct NotchContentView: View {
     let viewModel: NotchViewModel
+    @State private var promptText = ""
 
     private var sessionStore: SessionStore { viewModel.sessionStore }
     private var isExpanded: Bool { viewModel.isExpanded }
@@ -89,6 +90,17 @@ struct NotchContentView: View {
         VStack(spacing: 0) {
             // Header with pet, title, settings & quit
             expandedHeader
+
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(height: 0.5)
+
+            // Prompt input
+            PromptInputView(
+                promptText: $promptText,
+                workingDirectory: mostRecentWorkingDirectory,
+                onSend: {}
+            )
 
             Rectangle()
                 .fill(Color.white.opacity(0.06))
@@ -183,5 +195,9 @@ struct NotchContentView: View {
         } else {
             return .idle
         }
+    }
+
+    private var mostRecentWorkingDirectory: String? {
+        sessionStore.activeSessions.first?.cwd
     }
 }
