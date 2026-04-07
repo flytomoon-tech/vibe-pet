@@ -40,6 +40,15 @@ enum TerminalJump {
             return
         }
 
+        // Check accessibility permission first
+        if !PermissionChecker.checkAccessibilityPermission() {
+            logDebug("sendText: accessibility permission not granted")
+            DispatchQueue.main.async {
+                PermissionChecker.showAccessibilityAlert()
+            }
+            return
+        }
+
         logDebug("sendText: session=\(session.id) source=\(session.source.rawValue) bundleId=\(bundleId) tty=\(session.tty ?? "nil") text=\(text.prefix(50))")
 
         switch bundleId {
